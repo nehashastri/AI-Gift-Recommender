@@ -1,0 +1,26 @@
+   [workspace]
+   name = "gift-genius"
+   version = "0.1.0"
+   description = "AI-powered gift discovery platform"
+   channels = ["conda-forge"]
+   platforms = ["linux-64", "osx-64", "osx-arm64", "win-64"]
+
+   [dependencies]
+   python = ">=3.11,<3.13"
+pytest = ">=9.0.2,<10"
+
+   [pypi-dependencies]
+   fastapi = "*"
+   uvicorn = "*"
+   openai = ">=1.0.0"
+   pydantic = "*"
+   python-dotenv = "*"
+   requests = "*"
+   numpy = "*"
+   scikit-learn = "*"
+   streamlit = "*"
+   sqlalchemy = "*"
+
+   [tasks]
+   dev = "streamlit run app.py"
+   api = "uvicorn api.main:app --reload"

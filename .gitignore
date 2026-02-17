@@ -1,0 +1,16 @@
+# env
+.env
+
+# python
+__pycache__/
+*.pyc
+
+# pixi environments
+.pixi/
+
+# data
+data/*.db
+
+# OS and logs
+.DS_Store
+*.log
