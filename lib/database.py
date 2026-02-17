@@ -5,6 +5,8 @@ from sqlalchemy import JSON, Boolean, Column, DateTime, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+from lib.types import Persona
+
 Base = declarative_base()
 
 
@@ -36,57 +38,83 @@ class Database:
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
 
-    def create_persona(self, persona_data: dict) -> str:
-        """Create new persona"""
+    def create_persona(self, persona: Persona) -> str:
+        """Create new persona from Pydantic model"""
         import uuid
 
-        persona_id = str(uuid.uuid4())
+        persona_id = persona.id or str(uuid.uuid4())
 
-        persona = PersonaDB(
+        persona_db = PersonaDB(
             id=persona_id,
-            user_id=persona_data.get("user_id", "default_user"),
-            name=persona_data["name"],
-            birthday=persona_data.get("birthday"),
-            loves=persona_data.get("loves", []),
-            hates=persona_data.get("hates", []),
-            allergies=persona_data.get("allergies", []),
-            dietary_restrictions=persona_data.get("dietary_restrictions", []),
-            description=persona_data.get("description"),
-            email_reminders=persona_data.get("email_reminders", True),
+            user_id=persona.user_id,
+            name=persona.name,
+            birthday=persona.birthday,
+            loves=persona.loves,
+            hates=persona.hates,
+            allergies=persona.allergies,
+            dietary_restrictions=persona.dietary_restrictions,
+            description=persona.description,
+            email_reminders=persona.email_reminders,
         )
 
-        self.session.add(persona)
+        self.session.add(persona_db)
         self.session.commit()
 
         return persona_id
 
-    def get_persona(self, persona_id: str) -> Optional[dict]:
+    def get_persona(self, persona_id: str) -> Optional[Persona]:
         """Get persona by ID"""
-        persona = self.session.query(PersonaDB).filter_by(id=persona_id).first()
+        persona_db = self.session.query(PersonaDB).filter_by(id=persona_id).first()
 
-        if not persona:
+        if not persona_db:
             return None
 
-        return self._persona_to_dict(persona)
+        return self._persona_to_model(persona_db)
 
-    def get_user_personas(self, user_id: str = "default_user") -> List[dict]:
+    def get_user_personas(self, user_id: str = "default_user") -> List[Persona]:
         """Get all personas for a user"""
-        personas = self.session.query(PersonaDB).filter_by(user_id=user_id).all()
-        return [self._persona_to_dict(p) for p in personas]
+        personas_db = self.session.query(PersonaDB).filter_by(user_id=user_id).all()
+        return [self._persona_to_model(p) for p in personas_db]
 
     def update_persona(self, persona_id: str, updates: dict) -> bool:
-        """Update existing persona"""
-        persona = self.session.query(PersonaDB).filter_by(id=persona_id).first()
+        """Update existing persona with dict of updates"""
+        persona_db = self.session.query(PersonaDB).filter_by(id=persona_id).first()
 
-        if not persona:
+        if not persona_db:
             return False
 
         # Update fields
         for key, value in updates.items():
-            if hasattr(persona, key):
-                setattr(persona, key, value)
+            if hasattr(persona_db, key) and key not in ["id", "created_at"]:
+                setattr(persona_db, key, value)
 
-        setattr(persona, "updated_at", datetime.now())
+        setattr(persona_db, "updated_at", datetime.now())
+        self.session.commit()
+
+        return True
+
+    def update_persona_from_model(self, persona: Persona) -> bool:
+        """Update existing persona from Pydantic model"""
+        if not persona.id:
+            return False
+
+        persona_db = self.session.query(PersonaDB).filter_by(id=persona.id).first()
+
+        if not persona_db:
+            return False
+
+        # Update fields from Pydantic model
+        persona_db.user_id = persona.user_id  # type: ignore
+        persona_db.name = persona.name  # type: ignore
+        persona_db.birthday = persona.birthday  # type: ignore
+        persona_db.loves = persona.loves  # type: ignore
+        persona_db.hates = persona.hates  # type: ignore
+        persona_db.allergies = persona.allergies  # type: ignore
+        persona_db.dietary_restrictions = persona.dietary_restrictions  # type: ignore
+        persona_db.description = persona.description  # type: ignore
+        persona_db.email_reminders = persona.email_reminders  # type: ignore
+
+        setattr(persona_db, "updated_at", datetime.now())
         self.session.commit()
 
         return True
@@ -103,19 +131,19 @@ class Database:
 
         return True
 
-    def _persona_to_dict(self, persona: PersonaDB) -> dict:
-        """Convert database model to dict"""
-        return {
-            "id": persona.id,
-            "user_id": persona.user_id,
-            "name": persona.name,
-            "birthday": persona.birthday,
-            "loves": persona.loves or [],
-            "hates": persona.hates or [],
-            "allergies": persona.allergies or [],
-            "dietary_restrictions": persona.dietary_restrictions or [],
-            "description": persona.description,
-            "email_reminders": persona.email_reminders,
-            "created_at": persona.created_at,
-            "updated_at": persona.updated_at,
-        }
+    def _persona_to_model(self, persona_db: PersonaDB) -> Persona:
+        """Convert database model to Pydantic model"""
+        return Persona(
+            id=persona_db.id,  # type: ignore
+            user_id=persona_db.user_id,  # type: ignore
+            name=persona_db.name,  # type: ignore
+            birthday=persona_db.birthday,  # type: ignore
+            loves=persona_db.loves or [],  # type: ignore
+            hates=persona_db.hates or [],  # type: ignore
+            allergies=persona_db.allergies or [],  # type: ignore
+            dietary_restrictions=persona_db.dietary_restrictions or [],  # type: ignore
+            description=persona_db.description,  # type: ignore
+            email_reminders=persona_db.email_reminders,  # type: ignore
+            created_at=persona_db.created_at,  # type: ignore
+            updated_at=persona_db.updated_at,  # type: ignore
+        )
