@@ -1,0 +1,28 @@
+======================================================================
+SAMPLE PRODUCT FOR AI ANALYSIS
+======================================================================
+
+ID: 8877
+Name: Full of Fun Chocolate Cake
+Price: $44.99
+Popularity Rank: #5
+
+----------------------------------------------------------------------
+DESCRIPTION:
+----------------------------------------------------------------------
+This chocolate cake may be mini but it's bursting with goodies. Seriously—cut into it and confetti sprinkles and dark chocolate mini nonpareils will pour out. Think of it as a piñata for the table. And because it's topped with whipped topping and more chocolates, every slice packs a delicious punch.
+
+----------------------------------------------------------------------
+META DESCRIPTION:
+----------------------------------------------------------------------
+Full of Fun Chocolate Cake combines fruit and gourmet chocolate to redefine fruit. Think flowers, delicious foods and great gifts, think Fruit bouquets. Better than gift baskets and fruit baskets these floral creations are a peg up on gift baskets. Order these edible fruit flower arrangements as gifts now.
+
+----------------------------------------------------------------------
+INGREDIENTS:
+----------------------------------------------------------------------
+Chocolate Cake - Whipped Topping - Confetti Sprinkles and Choc Candies
+
+----------------------------------------------------------------------
+IMAGE URL:
+----------------------------------------------------------------------
+https://resources.ediblearrangements.com/resources/en-us/i/a/Sept25Full_of_Fun_Chocolate_Cake_.jpg

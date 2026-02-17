@@ -8,6 +8,7 @@
    [dependencies]
    python = ">=3.11,<3.13"
 pytest = ">=9.0.2,<10"
+openai = ">=2.21.0,<3"
 
    [pypi-dependencies]
    fastapi = "*"

@@ -1,22 +1,22 @@
-#Build reliable wrapper around Edible API with caching and error handling.
+# lib/edible_api.py
+
+from typing import List
 
 import requests
-#import json
-from typing import List, Optional, Dict
-from datetime import datetime, timedelta
+
 from lib.types import Product
+
 
 class EdibleAPIClient:
     """Client for Edible Arrangements API"""
 
-    def __init__(self, base_url: str = "https://www.ediblearrangements.com/api/search/"):
-        self.base_url = base_url
-        self.cache: Dict[str, tuple[List[Product], datetime]] = {}
-        self.cache_ttl = timedelta(minutes=30)
+    def __init__(self):
+        self.base_url = "https://www.ediblearrangements.com/api/search/"
+        self.cache = {}
 
     def search(self, keyword: str, use_cache: bool = True) -> List[Product]:
         """
-        Search Edible API for products
+        Search for products
 
         Args:
             keyword: Search term
@@ -25,111 +25,74 @@ class EdibleAPIClient:
         Returns:
             List of Product objects
         """
-        # Check cache
         if use_cache and keyword in self.cache:
-            products, cached_at = self.cache[keyword]
-            if datetime.now() - cached_at < self.cache_ttl:
-                print(f"Cache hit for '{keyword}' ({len(products)} products)")
-                return products
+            print(f"✓ Using cached results for '{keyword}'")
+            return self.cache[keyword]
 
-        # Make API request
-        print(f"Fetching products for '{keyword}' from API...")
+        print(f"→ Fetching from API: '{keyword}'")
 
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+            "Referer": "https://www.ediblearrangements.com/",
         }
 
         payload = {"keyword": keyword}
 
         try:
             response = requests.post(
-                self.base_url,
-                json=payload,
-                headers=headers,
-                timeout=10
+                self.base_url, json=payload, headers=headers, timeout=10
             )
-            response.raise_for_status()
 
+            # Accept both 200 and 201 as success
+            if response.status_code not in [200, 201]:
+                print(f"✗ API Error: Status {response.status_code}")
+                return []
+
+            # Response is a direct array
             data = response.json()
             products = self._parse_response(data)
 
             # Cache results
-            self.cache[keyword] = (products, datetime.now())
+            self.cache[keyword] = products
 
-            print(f"Found {len(products)} products")
+            print(f"✓ Found {len(products)} products")
             return products
 
-        except requests.exceptions.RequestException as e:
-            print(f"API Error: {e}")
+        except Exception as e:
+            print(f"✗ Error: {e}")
             return []
 
-    def _parse_response(self, data: dict) -> List[Product]:
+    def _parse_response(self, data: List[dict]) -> List[Product]:
         """Parse API response into Product objects"""
         products = []
 
-        # Adjust this based on actual API response structure
-        # You'll need to inspect the real response and adapt
-        items = data.get('products', []) or data.get('items', []) or data.get('results', [])
-
-        for item in items:
+        for index, item in enumerate(data, start=1):
             try:
+                # Use maxPrice as requested
+                price = item.get("maxPrice", item.get("minPrice", 0))
+
                 product = Product(
-                    id=str(item.get('id', item.get('sku', ''))),
-                    name=item.get('name', item.get('title', 'Unknown')),
-                    description=item.get('description', ''),
-                    price=float(item.get('price', 0)),
-                    image_url=item.get('image', item.get('imageUrl')),
-                    rating=item.get('rating'),
-                    review_count=item.get('reviewCount', item.get('reviews')),
-                    category=item.get('category'),
-                    raw_data=item
+                    id=str(item.get("id", "")),
+                    name=item.get("alt", item.get("name", "Unknown Product")),
+                    description=item.get("description", ""),
+                    meta_description=item.get("metaTagDescription"),
+                    price=float(price),
+                    image_url=item.get("image"),
+                    thumbnail_url=item.get("thumbnail"),
+                    ingredients=item.get("ingrediantNames"),
+                    popularity_rank=index,
                 )
+
                 products.append(product)
+
             except Exception as e:
-                print(f"Error parsing product: {e}")
+                print(f"Warning: Couldn't parse product at index {index}: {e}")
                 continue
 
         return products
 
-    def search_multiple(self, keywords: List[str]) -> List[Product]:
-        """
-        Search for multiple keywords and merge results
-        Deduplicates by product ID
-        """
-        all_products = []
-        seen_ids = set()
-
-        for keyword in keywords:
-            products = self.search(keyword)
-            for product in products:
-                if product.id not in seen_ids:
-                    all_products.append(product)
-                    seen_ids.add(product.id)
-
-        print(f"Merged {len(all_products)} unique products from {len(keywords)} searches")
-        return all_products
-
-# ===== KEYWORD MAPPING =====
-
-OCCASION_KEYWORDS = {
-    "birthday": ["birthday", "celebration", "party"],
-    "anniversary": ["anniversary", "romance", "love"],
-    "thank you": ["thank you", "appreciation", "gratitude"],
-    "get well soon": ["get well", "sympathy", "comfort"],
-    "congratulations": ["congratulations", "celebration", "achievement"],
-    "just because": ["gift", "surprise", "treat"],
-}
-
-def get_keywords_for_occasion(occasion: str, budget: Optional[float] = None) -> List[str]:
-    """Generate search keywords for an occasion"""
-    base_keywords = OCCASION_KEYWORDS.get(occasion.lower(), ["gift"])
-
-    # Add budget-related keywords
-    if budget:
-        if budget < 50:
-            base_keywords.append("affordable")
-        elif budget > 100:
-            base_keywords.append("premium")
-
-    return base_keywords
+    def clear_cache(self):
+        """Clear cached results"""
+        self.cache = {}
