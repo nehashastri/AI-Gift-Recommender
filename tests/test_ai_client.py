@@ -1,4 +1,8 @@
+from dotenv import load_dotenv
+
 from lib.ai_client import AIClient, cosine_similarity
+
+load_dotenv()
 
 ai = AIClient()
 

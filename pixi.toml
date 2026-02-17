@@ -7,13 +7,12 @@
 
    [dependencies]
    python = ">=3.11,<3.13"
-pytest = ">=9.0.2,<10"
-openai = ">=2.21.0,<3"
+   pytest = ">=9.0.2,<10"
 
    [pypi-dependencies]
    fastapi = "*"
    uvicorn = "*"
-   openai = ">=1.0.0"
+   openai = ">=1.0.0,<2.0.0"
    pydantic = "*"
    python-dotenv = "*"
    requests = "*"
