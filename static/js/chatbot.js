@@ -630,6 +630,19 @@ function closeRecommendations() {
 }
 
 function selectProduct(name, price) {
+    const pendingPersona = {
+        name: chatbotState.recipientName || 'Recipient',
+        birthday: null,
+        loves: chatbotState.loves || [],
+        hates: chatbotState.hates || [],
+        allergies: chatbotState.allergies || [],
+        dietary_restrictions: chatbotState.allergies || [],
+        description: chatbotState.interests || null,
+        last_gift: name,
+    };
+
+    localStorage.setItem('giftgenius_pending_persona', JSON.stringify(pendingPersona));
+
     const checkoutProduct = document.getElementById('checkout-product');
     checkoutProduct.innerHTML = `
         <div class="checkout-product-name">${name}</div>

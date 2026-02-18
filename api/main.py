@@ -1,7 +1,8 @@
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -12,8 +13,12 @@ from fastapi.staticfiles import StaticFiles
 # Load environment variables from .env file
 load_dotenv()
 
+from pydantic import BaseModel, Field
+
+from lib.database import Database
+from lib.email_service import EmailService
 from lib.recommender import GiftRecommender
-from lib.types import GiftWizardState
+from lib.types import GiftWizardState, Persona
 
 
 # ===== LOGGING SETUP =====
@@ -72,12 +77,150 @@ logger.info("=" * 60)
 
 app = FastAPI(title="Gift Genius API", version="1.0.0")
 
+# In-memory email inbox for demo
+EMAIL_INBOX: List[dict] = []
+
+# Email sender
+email_service = EmailService()
+
+# Database
+db = Database()
+
+
+class PersonaReminder(BaseModel):
+    name: str
+    birthday: Optional[str] = None  # YYYY-MM-DD
+    email_reminders: bool = True
+    last_gift: Optional[str] = None
+    user_email: Optional[str] = None
+
+
+class ReminderCheckRequest(BaseModel):
+    user_email: Optional[str] = None
+    personas: Optional[List[PersonaReminder]] = None
+
+
+class UserLoginRequest(BaseModel):
+    full_name: str
+    email: str
+
+
+class PersonaCreateRequest(BaseModel):
+    user_id: str
+    name: str
+    birthday: Optional[str] = None
+    loves: List[str] = Field(default_factory=list)
+    hates: List[str] = Field(default_factory=list)
+    allergies: List[str] = Field(default_factory=list)
+    dietary_restrictions: List[str] = Field(default_factory=list)
+    description: Optional[str] = None
+    email_reminders: bool = True
+
+
+class PersonaUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    birthday: Optional[str] = None
+    loves: Optional[List[str]] = None
+    hates: Optional[List[str]] = None
+    allergies: Optional[List[str]] = None
+    dietary_restrictions: Optional[List[str]] = None
+    description: Optional[str] = None
+    email_reminders: Optional[bool] = None
+
+
+def _parse_date(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    return datetime.strptime(value, "%Y-%m-%d")
+
+
+def _persona_to_response(persona: Persona) -> dict:
+    return {
+        "id": persona.id,
+        "user_id": persona.user_id,
+        "name": persona.name,
+        "birthday": persona.birthday.date().isoformat() if persona.birthday else None,
+        "loves": persona.loves,
+        "hates": persona.hates,
+        "allergies": persona.allergies,
+        "dietary_restrictions": persona.dietary_restrictions,
+        "description": persona.description,
+        "email_reminders": persona.email_reminders,
+        "created_at": persona.created_at.isoformat(),
+        "updated_at": persona.updated_at.isoformat(),
+    }
+
+
+def _send_birthday_reminders(
+    personas: List[PersonaReminder],
+    user_email: Optional[str] = None,
+) -> List[dict]:
+    tomorrow = (datetime.now() + timedelta(days=1)).date()
+    sent = []
+
+    for persona in personas:
+        if not persona.email_reminders or not persona.birthday:
+            continue
+
+        try:
+            birthday_date = datetime.strptime(persona.birthday, "%Y-%m-%d").date()
+        except ValueError:
+            logger.warning("[REMINDER] Invalid birthday format for %s", persona.name)
+            continue
+
+        if birthday_date.month != tomorrow.month or birthday_date.day != tomorrow.day:
+            continue
+
+        subject = f"Gift reminder: {persona.name}'s birthday is tomorrow"
+        body_lines = [
+            "Hi there,",
+            "",
+            f"Reminder: {persona.name}'s birthday is tomorrow.",
+            "",
+        ]
+        if persona.last_gift:
+            body_lines.append(f"Last gift picked: {persona.last_gift}")
+            body_lines.append("")
+        body_lines.append("Open Gift Genius to see fresh gift suggestions.")
+        body = "\n".join(body_lines)
+
+        recipient = persona.user_email or user_email
+        ok, status = email_service.send_email(subject, body, recipient)
+
+        message = {
+            "to": recipient or os.getenv("EMAIL_TO"),
+            "subject": subject,
+            "body": body,
+            "sent_at": datetime.now().isoformat(),
+            "status": status,
+        }
+        EMAIL_INBOX.append(message)
+        if ok:
+            sent.append({"name": persona.name, "status": status})
+
+    return sent
+
 
 @app.on_event("startup")
 async def startup_event():
     """Log on application startup"""
     logger.info("[STARTUP] Gift Genius API starting up...")
     logger.info("[STARTUP] Logging is now active")
+    try:
+        personas = db.get_all_personas()
+        reminders = [
+            PersonaReminder(
+                name=p.name,
+                birthday=p.birthday.date().isoformat() if p.birthday else None,
+                email_reminders=p.email_reminders,
+                user_email=p.user_id,
+            )
+            for p in personas
+        ]
+        sent = _send_birthday_reminders(reminders)
+        logger.info("[STARTUP] Reminder check sent %s emails", len(sent))
+    except Exception as exc:
+        logger.warning("[STARTUP] Reminder check failed: %s", exc)
 
 
 # Add CORS middleware
@@ -154,6 +297,96 @@ except RuntimeError:
 def serve_index():
     """Serve the main index page"""
     return FileResponse("static/index.html", media_type="text/html")
+
+
+@app.post("/api/reminders/check")
+def check_reminders(payload: ReminderCheckRequest):
+    """Check for birthdays happening tomorrow and send reminder emails."""
+    personas = payload.personas
+    if personas is None:
+        if payload.user_email:
+            db_personas = db.get_user_personas(user_id=payload.user_email)
+        else:
+            db_personas = db.get_all_personas()
+
+        personas = [
+            PersonaReminder(
+                name=p.name,
+                birthday=p.birthday.date().isoformat() if p.birthday else None,
+                email_reminders=p.email_reminders,
+                user_email=p.user_id,
+            )
+            for p in db_personas
+        ]
+
+    sent = _send_birthday_reminders(personas, payload.user_email)
+    return {"sent": sent, "count": len(sent)}
+
+
+@app.get("/api/inbox")
+def get_inbox(user_email: Optional[str] = None):
+    """Return demo inbox messages."""
+    if user_email:
+        filtered = [m for m in EMAIL_INBOX if m.get("to") == user_email]
+        return {"messages": filtered}
+    return {"messages": EMAIL_INBOX}
+
+
+@app.post("/api/login")
+def login(payload: UserLoginRequest):
+    """Simple demo login that returns a user_id derived from email."""
+    email = payload.email.strip().lower()
+    return {"user_id": email, "full_name": payload.full_name, "email": email}
+
+
+@app.get("/api/personas")
+def get_personas(user_id: str):
+    personas = db.get_user_personas(user_id=user_id)
+    return {"personas": [_persona_to_response(p) for p in personas]}
+
+
+@app.post("/api/personas")
+def create_persona(payload: PersonaCreateRequest):
+    persona = Persona(
+        user_id=payload.user_id,
+        name=payload.name,
+        birthday=_parse_date(payload.birthday),
+        loves=payload.loves,
+        hates=payload.hates,
+        allergies=payload.allergies,
+        dietary_restrictions=payload.dietary_restrictions,
+        description=payload.description,
+        email_reminders=payload.email_reminders,
+    )
+    persona_id = db.create_persona(persona)
+    created = db.get_persona(persona_id)
+    if not created:
+        raise HTTPException(status_code=500, detail="Failed to create persona")
+    return {"persona": _persona_to_response(created)}
+
+
+@app.put("/api/personas/{persona_id}")
+def update_persona(persona_id: str, payload: PersonaUpdateRequest):
+    updates = payload.dict(exclude_unset=True)
+    if "birthday" in updates:
+        updates["birthday"] = _parse_date(updates.get("birthday"))
+
+    ok = db.update_persona(persona_id, updates)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Persona not found")
+
+    persona = db.get_persona(persona_id)
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    return {"persona": _persona_to_response(persona)}
+
+
+@app.delete("/api/personas/{persona_id}")
+def delete_persona(persona_id: str):
+    ok = db.delete_persona(persona_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    return {"deleted": True}
 
 
 if __name__ == "__main__":

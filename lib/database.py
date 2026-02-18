@@ -76,6 +76,11 @@ class Database:
         personas_db = self.session.query(PersonaDB).filter_by(user_id=user_id).all()
         return [self._persona_to_model(p) for p in personas_db]
 
+    def get_all_personas(self) -> List[Persona]:
+        """Get all personas"""
+        personas_db = self.session.query(PersonaDB).all()
+        return [self._persona_to_model(p) for p in personas_db]
+
     def update_persona(self, persona_id: str, updates: dict) -> bool:
         """Update existing persona with dict of updates"""
         persona_db = self.session.query(PersonaDB).filter_by(id=persona_id).first()

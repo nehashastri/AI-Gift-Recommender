@@ -539,29 +539,58 @@ Return ONLY a JSON object:
 
                 unique = max(unique_scores, key=lambda x: x["score"])
         else:
-            # Fallback: pick a "unique" option from remaining Path A items
-            remaining_for_unique = [
-                p
-                for p in path_a_safe
-                if p.id not in {best_match["product"].id, safe_bet["product"].id}
-            ]
-            if remaining_for_unique:
-                unique_scores = []
-                for product in remaining_for_unique:
-                    score, breakdown = calculate_unique_score(
-                        product, wizard_state, path_a_safe + path_b_safe
-                    )
-                    breakdown.append(
-                        "Fallback: no description for semantic match; selected from remaining options"
-                    )
-                    unique_scores.append(
-                        {"product": product, "score": score, "breakdown": breakdown}
-                    )
+            # Fallback: use default unique products
+            logger.info(
+                "[UNIQUE FALLBACK] Path B empty, using default unique products..."
+            )
 
-                unique = max(unique_scores, key=lambda x: x["score"])
+            unique = None  # Default to None if no safe products remain
+
+            import random
+
+            from lib.default_uniques import DefaultUniqueProducts
+
+            default_manager = DefaultUniqueProducts()
+            default_products = default_manager.get_default_products()
+
+            logger.debug(
+                f"[UNIQUE FALLBACK] Loaded {len(default_products)} default unique products"
+            )
+
+            if default_products:
+                # Filter through AI safety check
+                logger.info("[UNIQUE FALLBACK] Applying AI safety filter...")
+                safe_defaults = self._ai_safety_filter(
+                    default_products, wizard_state, "Default Uniques"
+                )
+
+                logger.info(
+                    f"[UNIQUE FALLBACK] {len(default_products)} → {len(safe_defaults)} "
+                    "products after safety filter"
+                )
+
+                if safe_defaults:
+                    # Pick one randomly from the safe products
+                    selected_product = random.choice(safe_defaults)
+                    unique = {
+                        "product": selected_product,
+                        "score": 60,  # Neutral score for default selection
+                        "breakdown": [
+                            "Curated unique pick",
+                            "Safe for recipient (passed AI validation)",
+                            "(Random selection from default unique products)",
+                        ],
+                    }
+                    logger.info(
+                        f"[UNIQUE FALLBACK] Randomly selected: {selected_product.name}"
+                    )
+                else:
+                    logger.info(
+                        "[UNIQUE FALLBACK] No default products passed safety filter. "
+                        "Returning no unique pick."
+                    )
             else:
-                # Final fallback: reuse safe bet if there is no remaining distinct option
-                unique = safe_bet
+                logger.warning("[UNIQUE FALLBACK] No default products available.")
 
         # Build recommendations
         return ThreePickRecommendations(
