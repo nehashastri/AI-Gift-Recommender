@@ -70,7 +70,7 @@ class Database:
         user_db = self.session.query(UserDB).filter_by(email=email).first()
         if not user_db:
             return None
-        user_db.full_name = full_name
+        setattr(user_db, "full_name", full_name)
         setattr(user_db, "updated_at", datetime.now())
         self.session.commit()
         return user_db
@@ -114,7 +114,7 @@ class Database:
         return [self._persona_to_model(p) for p in personas_db]
 
     def get_all_personas(self) -> List[Persona]:
-        """Get all personas"""
+        """Get all personas across all users"""
         personas_db = self.session.query(PersonaDB).all()
         return [self._persona_to_model(p) for p in personas_db]
 

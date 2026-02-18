@@ -1,8 +1,10 @@
-import os
-from openai import OpenAI
-import numpy as np
-from typing import List, Dict, Any, Optional
 import json
+import os
+from typing import Any, Dict, List, Optional
+
+import numpy as np
+from openai import OpenAI
+
 
 class AIClient:
     """Wrapper for OpenAI API calls"""
@@ -11,7 +13,9 @@ class AIClient:
         self.client = OpenAI(api_key=api_key or os.getenv("OPENAI_API_KEY"))
         self.embedding_cache: Dict[str, List[float]] = {}
 
-    def get_embedding(self, text: str, model: str = "text-embedding-3-small") -> List[float]:
+    def get_embedding(
+        self, text: str, model: str = "text-embedding-3-small"
+    ) -> List[float]:
         """
         Get embedding for text with caching
 
@@ -28,10 +32,7 @@ class AIClient:
             return self.embedding_cache[cache_key]
 
         # Get embedding from API
-        response = self.client.embeddings.create(
-            model=model,
-            input=text
-        )
+        response = self.client.embeddings.create(model=model, input=text)
 
         embedding = response.data[0].embedding
         self.embedding_cache[cache_key] = embedding
@@ -43,7 +44,7 @@ class AIClient:
         messages: List[Dict[str, str]],
         model: str = "gpt-4o-mini",
         response_format: Optional[Dict] = None,
-        temperature: float = 0.7
+        temperature: float = 0.7,
     ) -> str:
         """
         Get chat completion
@@ -57,11 +58,7 @@ class AIClient:
         Returns:
             Response content as string
         """
-        params = {
-            "model": model,
-            "messages": messages,
-            "temperature": temperature
-        }
+        params = {"model": model, "messages": messages, "temperature": temperature}
 
         if response_format:
             params["response_format"] = response_format
@@ -70,9 +67,7 @@ class AIClient:
         return response.choices[0].message.content
 
     def chat_completion_json(
-        self,
-        messages: List[Dict[str, str]],
-        model: str = "gpt-4o-mini"
+        self, messages: List[Dict[str, str]], model: str = "gpt-4o-mini"
     ) -> Dict[str, Any]:
         """
         Get chat completion with JSON response
@@ -84,10 +79,11 @@ class AIClient:
             messages=messages,
             model=model,
             response_format={"type": "json_object"},
-            temperature=0.3  # Lower temperature for structured output
+            temperature=0.3,  # Lower temperature for structured output
         )
 
         return json.loads(content)
+
 
 def cosine_similarity(embedding1: List[float], embedding2: List[float]) -> float:
     """Calculate cosine similarity between two embeddings"""

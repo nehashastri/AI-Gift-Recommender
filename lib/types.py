@@ -170,3 +170,69 @@ class AttributeExtractionResponse(BaseModel):
     """
 
     attributes: List[ProductAttributes]
+
+
+# ===== API REQUEST/RESPONSE TYPES =====
+
+
+class PersonaReminder(BaseModel):
+    """Persona data for reminder checks"""
+
+    name: str
+    birthday: Optional[str] = None  # YYYY-MM-DD
+    email_reminders: bool = True
+    last_gift: Optional[str] = None
+    user_email: Optional[str] = None
+    loves: Optional[List[str]] = None
+    hates: Optional[List[str]] = None
+    allergies: Optional[List[str]] = None
+    dietary_restrictions: Optional[List[str]] = None
+    description: Optional[str] = None
+
+
+class ReminderCheckRequest(BaseModel):
+    """Request to check for upcoming birthdays and send reminders"""
+
+    user_email: Optional[str] = None
+    personas: Optional[List[PersonaReminder]] = None
+
+
+class UserLoginRequest(BaseModel):
+    """User login request"""
+
+    email: str
+
+
+class UserSignupRequest(BaseModel):
+    """User signup request"""
+
+    full_name: str
+    email: str
+    password: str
+
+
+class PersonaCreateRequest(BaseModel):
+    """Request to create a new persona"""
+
+    user_id: str
+    name: str
+    birthday: Optional[str] = None
+    loves: List[str] = Field(default_factory=list)
+    hates: List[str] = Field(default_factory=list)
+    allergies: List[str] = Field(default_factory=list)
+    dietary_restrictions: List[str] = Field(default_factory=list)
+    description: Optional[str] = None
+    email_reminders: bool = True
+
+
+class PersonaUpdateRequest(BaseModel):
+    """Request to update an existing persona"""
+
+    name: Optional[str] = None
+    birthday: Optional[str] = None
+    loves: Optional[List[str]] = None
+    hates: Optional[List[str]] = None
+    allergies: Optional[List[str]] = None
+    dietary_restrictions: Optional[List[str]] = None
+    description: Optional[str] = None
+    email_reminders: Optional[bool] = None

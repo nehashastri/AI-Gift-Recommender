@@ -276,7 +276,7 @@ class GiftRecommender:
             similarity = cosine_similarity(description_embedding, product_embedding)
 
             # Keep if semantically relevant
-            if similarity > 0.8:
+            if similarity > 0.5:
                 candidates.append((product, similarity))
                 logger.debug(f"✓ {product.name[:45]:45} | Similarity: {similarity:.3f}")
 
@@ -451,7 +451,8 @@ Return ONLY a JSON object:
         """
         from lib.scorer import (
             calculate_best_match_score,
-            calculate_unique_score,
+            calculate_safe_bet_score,
+            select_unique_pick,
         )
 
         # === BEST MATCH (from Path A) ===
@@ -467,130 +468,32 @@ Return ONLY a JSON object:
         # === SAFE BET (from Path A, exclude best match) ===
         remaining_a = [p for p in path_a_safe if p.id != best_match["product"].id]
 
-        # BULLETPROOF OCCASION FILTERING: Remove products with incompatible occasions
-        # Filter out products that mention distinct occasions different from the user's occasion
-        if wizard_state.occasion:
-            remaining_a = self._filter_by_occasion(remaining_a, wizard_state.occasion)
-
-        # Select product with lowest popularity_rank (most popular)
-        products_with_rank = [p for p in remaining_a if p.popularity_rank is not None]
-
-        if products_with_rank:
-            safe_bet_product = min(
-                products_with_rank, key=lambda p: p.popularity_rank or 999
+        # Ensure we have products remaining after exclusion
+        if not remaining_a:
+            raise Exception(
+                "Not enough distinct products for safe bet recommendation. "
+                "Need at least 2 products in Path A after filtering."
             )
-            safe_bet = {
-                "product": safe_bet_product,
-                "score": max(100 - safe_bet_product.popularity_rank, 0)
-                if safe_bet_product.popularity_rank
-                else 50,
-                "breakdown": [
-                    f"Most popular choice (popularity rank #{safe_bet_product.popularity_rank})"
-                ],
-            }
-        elif remaining_a:
-            # Fallback to first product if no popularity ranks available
-            safe_bet = {
-                "product": remaining_a[0],
-                "score": 50,
-                "breakdown": [
-                    "Selected from available options (no popularity ranking)"
-                ],
-            }
-        else:
-            # Fallback to best match if no other products
-            safe_bet = best_match
+
+        # Score all remaining products using safe bet criteria
+        safe_bet_scores = []
+        for product in remaining_a:
+            score, breakdown = calculate_safe_bet_score(product)
+            safe_bet_scores.append(
+                {"product": product, "score": score, "breakdown": breakdown}
+            )
+
+        # Select the highest scoring safe bet
+        safe_bet = max(safe_bet_scores, key=lambda x: x["score"])
 
         # === UNIQUE (from Path B) ===
-        unique = None
-        if path_b_safe:
-            # Use semantic similarity scores if available (primary method)
-            if path_b_similarity_scores:
-                # Filter to products that are in path_b_safe and have similarity scores
-                scored_products = [
-                    p for p in path_b_safe if p.id in path_b_similarity_scores
-                ]
-
-                if scored_products:
-                    # Use the product with highest semantic similarity
-                    best_product = max(
-                        scored_products, key=lambda p: path_b_similarity_scores[p.id]
-                    )
-                    similarity = path_b_similarity_scores[best_product.id]
-                    unique = {
-                        "product": best_product,
-                        "score": similarity * 100,  # Convert to 0-100 scale
-                        "breakdown": [
-                            f"Semantic similarity: {similarity:.2f}",
-                            "Matches recipient's lifestyle and personality",
-                        ],
-                    }
-
-            # Fallback to keyword-based scoring if no similarity scores available
-            if unique is None:
-                unique_scores = []
-                for product in path_b_safe:
-                    score, breakdown = calculate_unique_score(
-                        product, wizard_state, path_a_safe + path_b_safe
-                    )
-                    unique_scores.append(
-                        {"product": product, "score": score, "breakdown": breakdown}
-                    )
-
-                unique = max(unique_scores, key=lambda x: x["score"])
-        else:
-            # Fallback: use default unique products
-            logger.info(
-                "[UNIQUE FALLBACK] Path B empty, using default unique products..."
-            )
-
-            unique = None  # Default to None if no safe products remain
-
-            import random
-
-            from lib.default_uniques import DefaultUniqueProducts
-
-            default_manager = DefaultUniqueProducts()
-            default_products = default_manager.get_default_products()
-
-            logger.debug(
-                f"[UNIQUE FALLBACK] Loaded {len(default_products)} default unique products"
-            )
-
-            if default_products:
-                # Filter through AI safety check
-                logger.info("[UNIQUE FALLBACK] Applying AI safety filter...")
-                safe_defaults = self._ai_safety_filter(
-                    default_products, wizard_state, "Default Uniques"
-                )
-
-                logger.info(
-                    f"[UNIQUE FALLBACK] {len(default_products)} → {len(safe_defaults)} "
-                    "products after safety filter"
-                )
-
-                if safe_defaults:
-                    # Pick one randomly from the safe products
-                    selected_product = random.choice(safe_defaults)
-                    unique = {
-                        "product": selected_product,
-                        "score": 60,  # Neutral score for default selection
-                        "breakdown": [
-                            "Curated unique pick",
-                            "Safe for recipient (passed AI validation)",
-                            "(Random selection from default unique products)",
-                        ],
-                    }
-                    logger.info(
-                        f"[UNIQUE FALLBACK] Randomly selected: {selected_product.name}"
-                    )
-                else:
-                    logger.info(
-                        "[UNIQUE FALLBACK] No default products passed safety filter. "
-                        "Returning no unique pick."
-                    )
-            else:
-                logger.warning("[UNIQUE FALLBACK] No default products available.")
+        unique = select_unique_pick(
+            path_b_safe=path_b_safe,
+            path_b_similarity_scores=path_b_similarity_scores,
+            wizard_state=wizard_state,
+            all_products=path_a_safe + path_b_safe,
+            ai_safety_filter=self._ai_safety_filter,
+        )
 
         # Build recommendations
         return ThreePickRecommendations(
