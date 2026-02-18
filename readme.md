@@ -6,7 +6,7 @@ AI-powered gift discovery platform that understands who you're shopping for.
 - **Dual-Path Intelligence**: Matches explicit preferences AND creative lifestyle-based suggestions
 - **Safety First**: AI validates every recommendation against allergies and dislikes
 - **Persona Management**: Save recipients and get instant recommendations next time
-- **Transparent Scoring**: See exactly why each product was recommended
+- **Email Reminders**: Schedule and send reminder emails for upcoming gift occasions
 
 ## Tech Stack
 
@@ -14,21 +14,29 @@ AI-powered gift discovery platform that understands who you're shopping for.
 - **Backend**: Python 3.11, FastAPI
 - **AI**: OpenAI API (gpt-4o-mini, text-embedding-3-small)
 - **Database**: SQLite
-- **Frontend**: Streamlit
+- **Frontend**: Static HTML/CSS/JS
 
 ## Project Structure
 ```
 gift-genius/
-├── app.py                    # Streamlit frontend
+├── app.py                    # App entrypoint
+├── api/
+│   ├── __init__.py
+│   └── main.py               # FastAPI app
 ├── lib/
 │   ├── types.py             # Type definitions
 │   ├── edible_api.py        # Edible API client
 │   ├── ai_client.py         # OpenAI wrapper
 │   ├── recommender.py       # Core recommendation engine
 │   ├── scorer.py            # Scoring algorithms
+│   ├── reminder_service.py  # Email reminders
 │   └── database.py          # Persona management
+├── static/                  # Web frontend assets
 ├── tests/                   # Test suite
-└── data/                    # SQLite database
+├── data/                    # App data and defaults
+├── logs/
+├── start.ps1                # Local run helper
+└── pixi.toml                # Environment definition
 ```
 
 ## Model Selection
