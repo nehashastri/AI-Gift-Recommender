@@ -18,6 +18,7 @@ class Product(BaseModel):
     thumbnail_url: Optional[str] = None
     ingredients: Optional[str] = None
     popularity_rank: Optional[int] = None
+    is_one_hour_delivery: bool = False
     occasions: List[str] = Field(
         default_factory=list
     )  # Occasion tags from API: ["Anniversary", "Birthday", "Wedding"]

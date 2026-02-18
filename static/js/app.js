@@ -230,8 +230,8 @@ function renderPersonaDetails(persona) {
             <input id="persona-loves" type="text" value="${listToInput(persona.loves)}">
         </div>
         <div class="form-group">
-            <label>Hates (comma separated)</label>
-            <input id="persona-hates" type="text" value="${listToInput(persona.hates)}">
+            <label>Dislikes (comma separated)</label>
+            <input id="persona-dislikes" type="text" value="${listToInput(persona.hates)}">
         </div>
         <div class="form-group">
             <label>Allergies (comma separated)</label>
@@ -262,7 +262,7 @@ function renderPersonaDetails(persona) {
         const updates = {
             birthday: document.getElementById('persona-birthday').value || null,
             loves: parseListInput(document.getElementById('persona-loves').value),
-            hates: parseListInput(document.getElementById('persona-hates').value),
+            hates: parseListInput(document.getElementById('persona-dislikes').value),
             allergies: parseListInput(document.getElementById('persona-allergies').value),
             dietary_restrictions: parseListInput(document.getElementById('persona-dietary').value),
             description: document.getElementById('persona-description').value || null,
@@ -308,8 +308,8 @@ function renderNewPersonaForm() {
             <input id="new-loves" type="text">
         </div>
         <div class="form-group">
-            <label>Hates (comma separated)</label>
-            <input id="new-hates" type="text">
+            <label>Dislikes (comma separated)</label>
+            <input id="new-dislikes" type="text">
         </div>
         <div class="form-group">
             <label>Allergies (comma separated)</label>
@@ -348,7 +348,7 @@ function renderNewPersonaForm() {
             name,
             birthday: document.getElementById('new-birthday').value || null,
             loves: parseListInput(document.getElementById('new-loves').value),
-            hates: parseListInput(document.getElementById('new-hates').value),
+            hates: parseListInput(document.getElementById('new-dislikes').value),
             allergies: parseListInput(document.getElementById('new-allergies').value),
             dietary_restrictions: parseListInput(document.getElementById('new-dietary').value),
             description: document.getElementById('new-description').value || null,
@@ -580,7 +580,7 @@ function completeFlow() {
     chatbotState.sameDayDelivery = false;
     chatbotState.recipientName = '';
     chatbotState.loves = [];
-    chatbotState.hates = [];
+    chatbotState.dislikes = [];
     chatbotState.allergies = [];
     chatbotState.interests = '';
 

@@ -614,6 +614,26 @@ body {
     margin-bottom: 1rem;
 }
 
+.rec-ingredients {
+    font-size: 0.85rem;
+    background-color: #f9f9f9;
+    padding: 1rem;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    margin-top: 1rem;
+}
+
+.ingredients-title {
+    font-weight: 600;
+    color: var(--dark-color);
+    margin-bottom: 0.5rem;
+}
+
+.ingredients-text {
+    color: var(--text-color);
+    line-height: 1.5;
+}
+
 .rec-actions {
     display: flex;
     gap: 0.5rem;

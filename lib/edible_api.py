@@ -110,6 +110,7 @@ class EdibleAPIClient:
                     thumbnail_url=item.get("thumbnail"),
                     ingredients=item.get("ingrediantNames"),
                     popularity_rank=index,
+                    is_one_hour_delivery=bool(item.get("isOneHourDelivery", False)),
                     occasions=occasions,
                 )
 

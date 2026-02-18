@@ -6,7 +6,7 @@ const chatbotState = {
     sameDayDelivery: false,
     recipientName: '',
     loves: [],
-    hates: [],
+    dislikes: [],
     allergies: [],
     interests: '',
 };
@@ -41,7 +41,7 @@ const chatbotSteps = [
     },
     {
         id: 'sameDayDelivery',
-        question: 'Do you need same-day delivery?',
+        question: 'Do you need same-day delivery (within an hour)?',
         type: 'options-skip',
         options: [
             { label: 'Yes', value: true },
@@ -66,15 +66,14 @@ const chatbotSteps = [
             { label: '🧁 Brownies', value: 'brownies' },
             { label: '🍪 Cookies', value: 'cookies' },
             { label: '🌸 Flowers', value: 'flowers' },
-            { label: '🧸 Teddy Bear', value: 'teddy_bear' },
             { label: '🎂 Cake', value: 'cake' },
             { label: '🍰 Pastries', value: 'pastries' },
         ],
         skipText: 'Skip',
     },
     {
-        id: 'hates',
-        question: "Is there anything _name_ hates?",
+        id: 'dislikes',
+        question: "Is there anything _name_ dislikes?",
         type: 'toggle-multi',
         options: [
             { label: '🍫 Chocolate', value: 'chocolate' },
@@ -82,7 +81,6 @@ const chatbotSteps = [
             { label: '🧁 Brownies', value: 'brownies' },
             { label: '🍪 Cookies', value: 'cookies' },
             { label: '🌸 Flowers', value: 'flowers' },
-            { label: '🧸 Teddy Bear', value: 'teddy_bear' },
             { label: '🎂 Cake', value: 'cake' },
             { label: '🍰 Pastries', value: 'pastries' },
         ],
@@ -106,7 +104,7 @@ const chatbotSteps = [
         id: 'interests',
         question: 'Anything else you want to share about _name_? (hobbies, interests, etc.)',
         type: 'input-textarea',
-        placeholder: 'E.g., loves gardening, enjoys cooking, sports enthusiast...',
+        placeholder: 'E.g., loves gardening, loves tea, likes candles, etc.',
         skipText: 'Skip',
     },
 ];
@@ -117,12 +115,10 @@ function initChatbot() {
     const chatbotToggle = document.getElementById('chatbot-toggle');
     const closeBtn = document.getElementById('close-chatbot');
     const nextBtn = document.getElementById('next-btn');
-    const prevBtn = document.getElementById('prev-btn');
 
     chatbotToggle.addEventListener('click', openChatbot);
     closeBtn.addEventListener('click', closeChatbot);
     nextBtn.addEventListener('click', nextStep);
-    prevBtn.addEventListener('click', prevStep);
 
     // Render first step
     console.log('[CHATBOT] Initialization complete. Rendering first step...');
@@ -144,7 +140,6 @@ function renderStep() {
     const step = chatbotSteps[chatbotState.currentStep];
     const body = document.getElementById('chatbot-body');
     const nextBtn = document.getElementById('next-btn');
-    const prevBtn = document.getElementById('prev-btn');
 
     console.log(`[CHATBOT] Rendering step ${chatbotState.currentStep}/${chatbotSteps.length - 1}: ${step.id}`, step);
 
@@ -266,8 +261,8 @@ function renderStep() {
         // Filter options based on step rules
         let filteredOptions = step.options;
 
-        // If this is the "hates" step, exclude items that were selected as "loves"
-        if (step.id === 'hates' && chatbotState.loves && chatbotState.loves.length > 0) {
+        // If this is the "dislikes" step, exclude items that were selected as "loves"
+        if (step.id === 'dislikes' && chatbotState.loves && chatbotState.loves.length > 0) {
             filteredOptions = step.options.filter(option =>
                 !chatbotState.loves.includes(option.value)
             );
@@ -335,9 +330,6 @@ function renderStep() {
 
     body.appendChild(stepDiv);
 
-    // Update button visibility
-    prevBtn.style.display = chatbotState.currentStep > 0 ? 'block' : 'none';
-
     // Change next button text on last step
     if (chatbotState.currentStep === chatbotSteps.length - 1) {
         nextBtn.textContent = 'Get Recommendations →';
@@ -397,13 +389,6 @@ function nextStep() {
     renderStep();
 }
 
-function prevStep() {
-    if (chatbotState.currentStep > 0) {
-        chatbotState.currentStep--;
-        renderStep();
-    }
-}
-
 async function submitChatbot() {
     console.log('[API] submitChatbot() called');
     console.log('[API] Current chatbotState:', chatbotState);
@@ -444,7 +429,7 @@ async function submitChatbot() {
             delivery_date: chatbotState.sameDayDelivery ? new Date().toISOString() : null,
             recipient_name: chatbotState.recipientName,
             recipient_loves: chatbotState.loves,
-            recipient_hates: chatbotState.hates,
+            recipient_hates: chatbotState.dislikes,
             recipient_allergies: chatbotState.allergies,
             recipient_dietary: chatbotState.allergies, // Using allergies as dietary too
             recipient_description: chatbotState.interests || null,
@@ -616,6 +601,36 @@ function displayRecommendations(recommendations) {
 
         content.appendChild(actions);
 
+        // Create ingredients container (hidden by default)
+        const ingredientsContainer = document.createElement('div');
+        ingredientsContainer.className = 'rec-ingredients';
+        ingredientsContainer.style.display = 'none';
+
+        if (rec.product.ingredients) {
+            ingredientsContainer.innerHTML = `
+                <div class="ingredients-title">Ingredients:</div>
+                <div class="ingredients-text">${rec.product.ingredients}</div>
+            `;
+        } else {
+            ingredientsContainer.innerHTML = `
+                <div class="ingredients-title">Ingredients:</div>
+                <div class="ingredients-text">Ingredient information not available for this product.</div>
+            `;
+        }
+
+        content.appendChild(ingredientsContainer);
+
+        // Add click handler to toggle ingredients display
+        detailsBtn.onclick = () => {
+            if (ingredientsContainer.style.display === 'none') {
+                ingredientsContainer.style.display = 'block';
+                detailsBtn.textContent = 'Hide Details';
+            } else {
+                ingredientsContainer.style.display = 'none';
+                detailsBtn.textContent = 'Details';
+            }
+        };
+
         // Assemble card
         card.appendChild(imageContainer);
         card.appendChild(content);
@@ -634,7 +649,7 @@ function selectProduct(name, price) {
         name: chatbotState.recipientName || 'Recipient',
         birthday: null,
         loves: chatbotState.loves || [],
-        hates: chatbotState.hates || [],
+        hates: chatbotState.dislikes || [],
         allergies: chatbotState.allergies || [],
         dietary_restrictions: chatbotState.allergies || [],
         description: chatbotState.interests || null,

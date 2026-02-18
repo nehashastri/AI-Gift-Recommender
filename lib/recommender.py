@@ -164,6 +164,20 @@ class GiftRecommender:
         else:
             logger.debug("[BUDGET FILTER] No budget constraints, keeping all products")
 
+        # Filter by one-hour delivery when same-day delivery is requested
+        if wizard_state.delivery_date:
+            before_count = len(products)
+            products = [p for p in products if p.is_one_hour_delivery]
+            after_count = len(products)
+            logger.debug(
+                "[DELIVERY FILTER] One-hour delivery requested: %s → %s products",
+                before_count,
+                after_count,
+            )
+
+            if products:
+                self._display_products_table(products, "AFTER ONE-HOUR DELIVERY FILTER")
+
         return products
 
     def _display_products_table(self, products: List[Product], title: str = "PRODUCTS"):
