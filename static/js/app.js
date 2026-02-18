@@ -94,7 +94,21 @@ async function apiLogin(payload) {
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
-        throw new Error('Login failed');
+        const message = await response.text();
+        throw new Error(message || 'Login failed');
+    }
+    return response.json();
+}
+
+async function apiSignup(payload) {
+    const response = await fetch('/api/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        const message = await response.text();
+        throw new Error(message || 'Signup failed');
     }
     return response.json();
 }
@@ -414,10 +428,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 alert('Please fill in all fields');
                 return;
             }
-            const user = await apiLogin({ full_name: fullName, email });
-            setCurrentUser(user);
-            closeLogin();
-            openAccount();
+            try {
+                const user = await apiLogin({ full_name: fullName, email });
+                setCurrentUser(user);
+                closeLogin();
+                openAccount();
+            } catch (err) {
+                alert('Login failed. Please check your details and try again.');
+            }
         });
     }
 
@@ -508,7 +526,7 @@ function completeSignup() {
 
     const proceed = async () => {
         try {
-            const user = await apiLogin({ full_name: fullName, email });
+            const user = await apiSignup({ full_name: fullName, email, password });
             setCurrentUser(user);
             await savePendingPersona(user);
 

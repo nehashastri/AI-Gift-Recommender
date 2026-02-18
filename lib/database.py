@@ -29,6 +29,18 @@ class PersonaDB(Base):
     updated_at = Column(DateTime, default=datetime.now)
 
 
+class UserDB(Base):
+    """Database model for registered users"""
+
+    __tablename__ = "users"
+
+    email = Column(String, primary_key=True)
+    full_name = Column(String, nullable=False)
+    password_hash = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now)
+
+
 class Database:
     """Database manager"""
 
@@ -37,6 +49,31 @@ class Database:
         Base.metadata.create_all(self.engine)
         Session = sessionmaker(bind=self.engine)
         self.session = Session()
+
+    def get_user_by_email(self, email: str) -> Optional[UserDB]:
+        """Get user by email"""
+        return self.session.query(UserDB).filter_by(email=email).first()
+
+    def create_user(self, email: str, full_name: str, password_hash: str) -> UserDB:
+        """Create a new user"""
+        user_db = UserDB(
+            email=email,
+            full_name=full_name,
+            password_hash=password_hash,
+        )
+        self.session.add(user_db)
+        self.session.commit()
+        return user_db
+
+    def update_user_name(self, email: str, full_name: str) -> Optional[UserDB]:
+        """Update a user's full name"""
+        user_db = self.session.query(UserDB).filter_by(email=email).first()
+        if not user_db:
+            return None
+        user_db.full_name = full_name
+        setattr(user_db, "updated_at", datetime.now())
+        self.session.commit()
+        return user_db
 
     def create_persona(self, persona: Persona) -> str:
         """Create new persona from Pydantic model"""

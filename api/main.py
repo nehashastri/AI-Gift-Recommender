@@ -105,6 +105,12 @@ class UserLoginRequest(BaseModel):
     email: str
 
 
+class UserSignupRequest(BaseModel):
+    full_name: str
+    email: str
+    password: str
+
+
 class PersonaCreateRequest(BaseModel):
     user_id: str
     name: str
@@ -149,6 +155,17 @@ def _persona_to_response(persona: Persona) -> dict:
         "created_at": persona.created_at.isoformat(),
         "updated_at": persona.updated_at.isoformat(),
     }
+
+
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _hash_password(password: str) -> str:
+    import hashlib
+
+    # Simple hash for demo purposes; replace with a proper password hasher in production.
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def _send_birthday_reminders(
@@ -335,8 +352,30 @@ def get_inbox(user_email: Optional[str] = None):
 @app.post("/api/login")
 def login(payload: UserLoginRequest):
     """Simple demo login that returns a user_id derived from email."""
-    email = payload.email.strip().lower()
-    return {"user_id": email, "full_name": payload.full_name, "email": email}
+    email = _normalize_email(payload.email)
+    user = db.get_user_by_email(email)
+    if not user:
+        raise HTTPException(status_code=404, detail="Account not found")
+    if user.full_name.strip() != payload.full_name.strip():
+        raise HTTPException(status_code=401, detail="Invalid account details")
+
+    return {"user_id": email, "full_name": user.full_name, "email": email}
+
+
+@app.post("/api/signup")
+def signup(payload: UserSignupRequest):
+    """Create a new account."""
+    email = _normalize_email(payload.email)
+    existing = db.get_user_by_email(email)
+    if existing:
+        raise HTTPException(status_code=409, detail="Account already exists")
+
+    user = db.create_user(
+        email=email,
+        full_name=payload.full_name.strip(),
+        password_hash=_hash_password(payload.password),
+    )
+    return {"user_id": email, "full_name": user.full_name, "email": email}
 
 
 @app.get("/api/personas")
