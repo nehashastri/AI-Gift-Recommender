@@ -33,6 +33,7 @@ class EmailService:
         subject: str,
         body: str,
         to_email: Optional[str] = None,
+        html_body: Optional[str] = None,
     ) -> Tuple[bool, str]:
         if not self.is_configured():
             return False, "Email service not configured"
@@ -46,6 +47,8 @@ class EmailService:
         msg["To"] = recipient
         msg["Subject"] = subject
         msg.set_content(body)
+        if html_body:
+            msg.add_alternative(html_body, subtype="html")
 
         try:
             with smtplib.SMTP(self.server, self.port) as smtp:

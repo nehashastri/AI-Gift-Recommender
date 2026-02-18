@@ -56,6 +56,15 @@ function openAccount() {
     loadAccount();
 }
 
+function handleLoginClick() {
+    const user = getCurrentUser();
+    if (user) {
+        openAccount();
+    } else {
+        openLogin();
+    }
+}
+
 function closeAccount() {
     document.getElementById('account-page').classList.remove('show');
 }
@@ -75,6 +84,7 @@ window.closeLogin = closeLogin;
 window.closeAccount = closeAccount;
 window.closeInbox = closeInbox;
 window.openAccount = openAccount;
+window.handleLoginClick = handleLoginClick;
 
 function listToInput(list) {
     return (list || []).join(', ');
@@ -140,7 +150,8 @@ async function apiUpdatePersona(personaId, payload) {
         body: JSON.stringify(payload),
     });
     if (!response.ok) {
-        throw new Error('Failed to update persona');
+        const message = await response.text();
+        throw new Error(message || 'Failed to update persona');
     }
     return response.json();
 }
@@ -245,6 +256,9 @@ function renderPersonaDetails(persona) {
     `;
 
     document.getElementById('save-persona').addEventListener('click', async () => {
+        const saveButton = document.getElementById('save-persona');
+        saveButton.classList.add('loading');
+        saveButton.disabled = true;
         const updates = {
             birthday: document.getElementById('persona-birthday').value || null,
             loves: parseListInput(document.getElementById('persona-loves').value),
@@ -254,12 +268,19 @@ function renderPersonaDetails(persona) {
             description: document.getElementById('persona-description').value || null,
             email_reminders: document.getElementById('persona-reminders').checked,
         };
-        await apiUpdatePersona(persona.id, updates);
-        const user = getCurrentUser();
-        if (user) {
-            await triggerReminders(user.email);
+        try {
+            await apiUpdatePersona(persona.id, updates);
+            const user = getCurrentUser();
+            if (user) {
+                await triggerReminders(user.email);
+            }
+            await loadAccount(persona.id);
+        } catch (err) {
+            alert('Save failed. Please try again.');
+        } finally {
+            saveButton.classList.remove('loading');
+            saveButton.disabled = false;
         }
-        await loadAccount(persona.id);
     });
 
     document.getElementById('delete-persona').addEventListener('click', async () => {
@@ -357,9 +378,12 @@ async function loadInbox() {
     messages.forEach((message) => {
         const item = document.createElement('div');
         item.className = 'inbox-item';
+        const bodyContent = message.body_html
+            ? message.body_html
+            : message.body.replace(/\n/g, '<br>');
         item.innerHTML = `
             <h4>${message.subject}</h4>
-            <p>${message.body.replace(/\n/g, '<br>')}</p>
+            <div>${bodyContent}</div>
             <small>${message.sent_at}</small>
         `;
         inbox.appendChild(item);
@@ -407,14 +431,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) {
-        loginBtn.addEventListener('click', () => {
-            const user = getCurrentUser();
-            if (user) {
-                openAccount();
-            } else {
-                openLogin();
-            }
-        });
+        loginBtn.addEventListener('click', handleLoginClick);
     }
 
     const loginForm = document.getElementById('login-form');
@@ -422,14 +439,13 @@ document.addEventListener('DOMContentLoaded', function () {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = new FormData(loginForm);
-            const fullName = formData.get('full_name');
             const email = formData.get('email');
-            if (!fullName || !email) {
+            if (!email) {
                 alert('Please fill in all fields');
                 return;
             }
             try {
-                const user = await apiLogin({ full_name: fullName, email });
+                const user = await apiLogin({ email });
                 setCurrentUser(user);
                 closeLogin();
                 openAccount();

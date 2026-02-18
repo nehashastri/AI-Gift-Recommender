@@ -1,7 +1,7 @@
 import logging
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import List, Optional
 
 from dotenv import load_dotenv
@@ -93,6 +93,11 @@ class PersonaReminder(BaseModel):
     email_reminders: bool = True
     last_gift: Optional[str] = None
     user_email: Optional[str] = None
+    loves: Optional[List[str]] = None
+    hates: Optional[List[str]] = None
+    allergies: Optional[List[str]] = None
+    dietary_restrictions: Optional[List[str]] = None
+    description: Optional[str] = None
 
 
 class ReminderCheckRequest(BaseModel):
@@ -101,7 +106,6 @@ class ReminderCheckRequest(BaseModel):
 
 
 class UserLoginRequest(BaseModel):
-    full_name: str
     email: str
 
 
@@ -168,11 +172,121 @@ def _hash_password(password: str) -> str:
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
+def _format_suggestions(persona: PersonaReminder) -> List[dict]:
+    try:
+        wizard_state = GiftWizardState(
+            occasion="Birthday",
+            delivery_date=None,
+            recipient_name=persona.name,
+            recipient_loves=persona.loves or [],
+            recipient_hates=persona.hates or [],
+            recipient_allergies=persona.allergies or [],
+            recipient_dietary=persona.dietary_restrictions or [],
+            recipient_description=persona.description or None,
+        )
+        recommendations = recommender.get_recommendations(wizard_state)
+        picks = [
+            ("Best Match", recommendations.best_match),
+            ("Safe Bet", recommendations.safe_bet),
+            ("Something Unique", recommendations.unique),
+        ]
+        suggestions = []
+        for label, rec in picks:
+            if rec is None:
+                continue
+            product = rec.product
+            suggestions.append(
+                {
+                    "label": label,
+                    "name": product.name,
+                    "price": f"${product.price:.2f}",
+                    "description": product.description or "",
+                    "image_url": product.image_url or product.thumbnail_url or "",
+                }
+            )
+        return suggestions[:3]
+    except Exception as exc:
+        logger.warning(
+            "[REMINDER] Suggestion build failed for %s: %s", persona.name, exc
+        )
+        return []
+
+
+def _build_email_html(
+    persona: PersonaReminder,
+    when_text: str,
+    suggestions: List[dict],
+) -> str:
+    last_gift_line = (
+        f'<p style="margin: 0 0 12px; color: #555;">Last gift picked: {persona.last_gift}</p>'
+        if persona.last_gift
+        else ""
+    )
+    cards_html = ""
+    for suggestion in suggestions:
+        image_html = (
+            f'<img src="{suggestion["image_url"]}" alt="{suggestion["name"]}" '
+            'style="display: block; width: 100%; height: 140px; object-fit: cover;">'
+            if suggestion["image_url"]
+            else '<div style="height: 140px; background: #f5f5f5; display: flex; align-items: center; justify-content: center; font-size: 32px;">🎁</div>'
+        )
+        cards_html += f"""
+        <table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border: 1px solid #e6e6e6; border-radius: 10px; overflow: hidden; margin-bottom: 16px;\">
+            <tr>
+                <td>{image_html}</td>
+            </tr>
+            <tr>
+                <td style=\"padding: 16px;\">
+                    <span style=\"display: inline-block; background: #d4403b; color: #ffffff; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;\">{suggestion["label"]}</span>
+                    <h3 style=\"margin: 10px 0 4px; font-size: 16px; color: #333;\">{suggestion["name"]}</h3>
+                    <p style=\"margin: 0 0 8px; color: #d4403b; font-weight: 700;\">{suggestion["price"]}</p>
+                    <p style=\"margin: 0; color: #555; font-size: 13px; line-height: 1.4;\">{suggestion["description"]}</p>
+                    <div style=\"margin-top: 12px;\">
+                        <a href=\"#\" style=\"display: inline-block; padding: 8px 12px; background: #f5f5f5; color: #333; text-decoration: none; border: 1px solid #e0e0e0; border-radius: 6px; font-size: 12px; font-weight: 600;\">View Product</a>
+                    </div>
+                </td>
+            </tr>
+        </table>
+        """
+
+    suggestions_block = (
+        f"""
+        <p style=\"margin: 0 0 12px; color: #555;\">Here are a few gift ideas:</p>
+        {cards_html}
+        """
+        if suggestions
+        else ""
+    )
+
+    return f"""
+    <div style=\"background: #f6f6f6; padding: 24px; font-family: Arial, Helvetica, sans-serif;\">
+        <div style=\"max-width: 560px; margin: 0 auto; background: #ffffff; border: 1px solid #e6e6e6; border-radius: 12px; overflow: hidden;\">
+            <div style=\"background: #d4403b; color: #ffffff; padding: 20px 24px;\">
+                <h1 style=\"margin: 0; font-size: 20px;\">Gift Genius Reminder</h1>
+                <p style=\"margin: 8px 0 0; font-size: 14px; opacity: 0.9;\">Birthday coming up {when_text}</p>
+            </div>
+            <div style=\"padding: 24px;\">
+                <p style=\"margin: 0 0 12px; color: #333; font-size: 16px;\">Hi there,</p>
+                <p style=\"margin: 0 0 12px; color: #555;\">Reminder: {persona.name}'s birthday is {when_text}.</p>
+                {last_gift_line}
+                {suggestions_block}
+                <div style=\"margin-top: 20px;\">
+                    <a href=\"#\" style=\"display: inline-block; padding: 10px 16px; background: #d4403b; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600;\">View More Gift Ideas</a>
+                </div>
+            </div>
+            <div style=\"padding: 16px 24px; background: #fafafa; color: #888; font-size: 12px;\">
+                You are receiving this reminder because email reminders are enabled in Gift Genius.
+            </div>
+        </div>
+    </div>
+    """
+
+
 def _send_birthday_reminders(
     personas: List[PersonaReminder],
     user_email: Optional[str] = None,
 ) -> List[dict]:
-    tomorrow = (datetime.now() + timedelta(days=1)).date()
+    today = datetime.now().date()
     sent = []
 
     for persona in personas:
@@ -185,29 +299,47 @@ def _send_birthday_reminders(
             logger.warning("[REMINDER] Invalid birthday format for %s", persona.name)
             continue
 
-        if birthday_date.month != tomorrow.month or birthday_date.day != tomorrow.day:
+        next_birthday = birthday_date.replace(year=today.year)
+        if next_birthday < today:
+            next_birthday = next_birthday.replace(year=today.year + 1)
+
+        days_until = (next_birthday - today).days
+        if days_until < 0 or days_until > 10:
             continue
 
-        subject = f"Gift reminder: {persona.name}'s birthday is tomorrow"
+        when_text = "today" if days_until == 0 else f"in {days_until} days"
+        subject = f"Gift reminder: {persona.name}'s birthday is {when_text}"
         body_lines = [
             "Hi there,",
             "",
-            f"Reminder: {persona.name}'s birthday is tomorrow.",
+            f"Reminder: {persona.name}'s birthday is {when_text}.",
             "",
         ]
         if persona.last_gift:
             body_lines.append(f"Last gift picked: {persona.last_gift}")
             body_lines.append("")
-        body_lines.append("Open Gift Genius to see fresh gift suggestions.")
+
+        suggestions = _format_suggestions(persona)
+        if suggestions:
+            body_lines.append("Here are a few gift ideas:")
+            for suggestion in suggestions:
+                body_lines.append(
+                    f"- {suggestion['label']}: {suggestion['name']} ({suggestion['price']})"
+                )
+            body_lines.append("")
+
+        body_lines.append("Open Gift Genius to see more gift suggestions.")
         body = "\n".join(body_lines)
 
         recipient = persona.user_email or user_email
-        ok, status = email_service.send_email(subject, body, recipient)
+        html_body = _build_email_html(persona, when_text, suggestions)
+        ok, status = email_service.send_email(subject, body, recipient, html_body)
 
         message = {
             "to": recipient or os.getenv("EMAIL_TO"),
             "subject": subject,
             "body": body,
+            "body_html": html_body,
             "sent_at": datetime.now().isoformat(),
             "status": status,
         }
@@ -231,6 +363,11 @@ async def startup_event():
                 birthday=p.birthday.date().isoformat() if p.birthday else None,
                 email_reminders=p.email_reminders,
                 user_email=p.user_id,
+                loves=p.loves,
+                hates=p.hates,
+                allergies=p.allergies,
+                dietary_restrictions=p.dietary_restrictions,
+                description=p.description,
             )
             for p in personas
         ]
@@ -332,6 +469,11 @@ def check_reminders(payload: ReminderCheckRequest):
                 birthday=p.birthday.date().isoformat() if p.birthday else None,
                 email_reminders=p.email_reminders,
                 user_email=p.user_id,
+                loves=p.loves,
+                hates=p.hates,
+                allergies=p.allergies,
+                dietary_restrictions=p.dietary_restrictions,
+                description=p.description,
             )
             for p in db_personas
         ]
@@ -356,8 +498,6 @@ def login(payload: UserLoginRequest):
     user = db.get_user_by_email(email)
     if not user:
         raise HTTPException(status_code=404, detail="Account not found")
-    if user.full_name.strip() != payload.full_name.strip():
-        raise HTTPException(status_code=401, detail="Invalid account details")
 
     return {"user_id": email, "full_name": user.full_name, "email": email}
 
