@@ -18,7 +18,6 @@
    requests = "*"
    numpy = "*"
    scikit-learn = "*"
-   streamlit = "*"
    sqlalchemy = "*"
 
    [tasks]

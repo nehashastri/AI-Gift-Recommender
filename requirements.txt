@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+openai>=1.0.0,<2.0.0
+pydantic
+python-dotenv
+requests
+numpy
+scikit-learn
+sqlalchemy
