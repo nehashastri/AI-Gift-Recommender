@@ -18,6 +18,9 @@ class Product(BaseModel):
     thumbnail_url: Optional[str] = None
     ingredients: Optional[str] = None
     popularity_rank: Optional[int] = None
+    occasions: List[str] = Field(
+        default_factory=list
+    )  # Occasion tags from API: ["Anniversary", "Birthday", "Wedding"]
 
 
 class ProductAttributes(BaseModel):
@@ -86,7 +89,9 @@ class GiftWizardState(BaseModel):
     # Step 1: Basics
     recipient_name: Optional[str] = None
     occasion: str
-    budget: Optional[str] = None
+    budget: Optional[str] = None  # Kept for backward compatibility
+    budget_max: Optional[float] = None  # Structured budget - max price
+    budget_min: Optional[float] = None  # Structured budget - min price
     delivery_date: Optional[datetime]
 
     # Step 2: Preferences (recipient's preferences)

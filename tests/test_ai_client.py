@@ -1,6 +1,11 @@
+import logging
+
 from dotenv import load_dotenv
 
 from lib.ai_client import AIClient, cosine_similarity
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 
@@ -11,10 +16,10 @@ emb1 = ai.get_embedding("chocolate lover")
 emb2 = ai.get_embedding("loves chocolate")
 emb3 = ai.get_embedding("birthday party")
 
-print(
+logger.info(
     f"chocolate lover vs loves chocolate: {cosine_similarity(emb1, emb2)}"
 )  # Should be high
-print(
+logger.info(
     f"chocolate lover vs birthday party: {cosine_similarity(emb1, emb3)}"
 )  # Should be lower
 
@@ -23,4 +28,4 @@ response = ai.chat_completion(
     [{"role": "user", "content": "Say hello in JSON format with a 'message' field"}],
     response_format={"type": "json_object"},
 )
-print(response)
+logger.info(response)

@@ -1,5 +1,5 @@
 import json
-import re
+import logging
 from typing import List
 
 from lib.ai_client import AIClient, cosine_similarity
@@ -11,6 +11,8 @@ from lib.types import (
     SafetyValidationResponse,
     ThreePickRecommendations,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class GiftRecommender:
@@ -35,14 +37,32 @@ class GiftRecommender:
         6. Generate explanations
         """
 
-        print("\n" + "=" * 50)
-        print("STARTING RECOMMENDATION PIPELINE")
-        print("=" * 50)
+        logger.info("\n" + "=" * 50)
+        logger.info("STARTING RECOMMENDATION PIPELINE")
+        logger.info("=" * 50)
+        logger.info(f"[INPUT] Occasion: {wizard_state.occasion}")
+        logger.info(f"[INPUT] Budget: {wizard_state.budget} (legacy)")
+        logger.info(
+            f"[INPUT] Budget Min: ${wizard_state.budget_min}"
+            if wizard_state.budget_min
+            else "[INPUT] Budget Min: None"
+        )
+        logger.info(
+            f"[INPUT] Budget Max: ${wizard_state.budget_max}"
+            if wizard_state.budget_max
+            else "[INPUT] Budget Max: None"
+        )
+        logger.info(f"[INPUT] Recipient: {wizard_state.recipient_name}")
+        logger.info(f"[INPUT] Loves: {wizard_state.recipient_loves}")
+        logger.info(f"[INPUT] Hates: {wizard_state.recipient_hates}")
+        logger.info(f"[INPUT] Allergies: {wizard_state.recipient_allergies}")
+        logger.info(f"[INPUT] Dietary: {wizard_state.recipient_dietary}")
+        logger.info(f"[INPUT] Description: {wizard_state.recipient_description}")
 
         # === STEP 1: FETCH PRODUCTS ===
-        print("\n[Step 1] Fetching products from Edible API...")
+        logger.info("\n[Step 1] Fetching products from Edible API...")
         all_products = self._fetch_products(wizard_state)
-        print(f"Fetched {len(all_products)} products")
+        logger.info(f"Fetched {len(all_products)} products")
 
         if len(all_products) < 5:
             raise Exception(
@@ -50,58 +70,48 @@ class GiftRecommender:
             )
 
         # === STEP 2: PATH A - EXPLICIT PREFERENCE FILTERING ===
-        print("\n[Step 2] Path A: Filtering by explicit preferences...")
+        logger.info("\n[Step 2] Path A: Filtering by explicit preferences...")
         path_a_products = self._prefilter_explicit(all_products, wizard_state)
-        print(f"Path A: {len(all_products)} → {len(path_a_products)} products")
+        logger.info(f"Path A: {len(all_products)} → {len(path_a_products)} products")
 
         # === STEP 3: PATH B - SEMANTIC UNIQUE FILTERING ===
-        print("\n[Step 3] Path B: Semantic filtering for unique picks...")
+        logger.info("\n[Step 3] Path B: Semantic filtering for unique picks...")
         path_b_products, path_b_similarity_scores = self._prefilter_semantic(
             all_products, wizard_state
         )
-        print(f"Path B: {len(all_products)} → {len(path_b_products)} products")
+        logger.info(f"Path B: {len(all_products)} → {len(path_b_products)} products")
 
         # === STEP 4: AI SAFETY VALIDATION ===
-        print("\n[Step 4] AI Safety Validation...")
+        logger.info("\n[Step 4] AI Safety Validation...")
         path_a_safe = self._ai_safety_filter(path_a_products, wizard_state, "Path A")
         path_b_safe = self._ai_safety_filter(path_b_products, wizard_state, "Path B")
 
-        print(f"Path A safe: {len(path_a_safe)} products")
-        print(f"Path B safe: {len(path_b_safe)} products")
+        logger.info(f"Path A safe: {len(path_a_safe)} products")
+        logger.info(f"Path B safe: {len(path_b_safe)} products")
 
         if len(path_a_safe) < 2:
             raise Exception("Not enough safe products in Path A after safety filter")
 
         # === STEP 5: SELECTION ===
-        print("\n[Step 5] Selecting top 3 picks...")
+        logger.info("\n[Step 5] Selecting top 3 picks...")
         picks = self._select_three_picks(
             path_a_safe, path_b_safe, wizard_state, path_b_similarity_scores
         )
 
         # === STEP 6: GENERATE EXPLANATIONS ===
-        print("\n[Step 6] Generating explanations...")
+        logger.info("\n[Step 6] Generating explanations...")
         picks = self._add_explanations(picks, wizard_state)
 
-        print("\n" + "=" * 50)
-        print("RECOMMENDATION PIPELINE COMPLETE")
-        print("=" * 50 + "\n")
+        logger.info("\n" + "=" * 50)
+        logger.info("RECOMMENDATION PIPELINE COMPLETE")
+        logger.info("=" * 50 + "\n")
 
         return picks
 
     def _fetch_products(self, wizard_state: GiftWizardState) -> List[Product]:
         """Fetch products from Edible API based on occasion and budget"""
 
-        def _parse_budget_amount(raw_budget: str) -> float | None:
-            cleaned = raw_budget.strip().lower()
-            if not cleaned:
-                return None
-
-            cleaned = cleaned.replace("$", "").replace(",", "")
-            cleaned = re.sub(r"\b(under|below|less than)\b", "", cleaned).strip()
-
-            match = re.search(r"\d+(?:\.\d+)?", cleaned)
-            return float(match.group(0)) if match else None
-
+        # Build search keyword
         parts = []
 
         if wizard_state.occasion:
@@ -113,26 +123,65 @@ class GiftRecommender:
             ]
             if loves:
                 parts.append(", ".join(loves))
+                logger.debug(f"[SEARCH] Including recipient loves: {loves}")
 
-        if wizard_state.budget is not None:
-            budget_str = wizard_state.budget.strip()
-            if budget_str:
-                if re.search(r"\b(under|below|less than)\b", budget_str, re.IGNORECASE):
-                    parts.append(budget_str)
-                else:
-                    parts.append(f"under {budget_str}")
-
+        # Don't include budget in search term - it's just a filter
         keyword = " ".join(parts).strip()
+
+        logger.debug(f"\n{'=' * 60}")
+        logger.debug(f"[SEARCH] Final search keyword: '{keyword}'")
+        logger.debug(f"{'=' * 60}\n")
 
         products = self.edible_client.search(keyword)
 
-        # Filter by budget if specified
-        if wizard_state.budget:
-            budget_amount = _parse_budget_amount(wizard_state.budget)
-            if budget_amount is not None:
-                products = [p for p in products if p.price <= budget_amount * 1.3]
+        logger.debug(f"\n[API FETCH] Received {len(products)} products from API")
+
+        # Display products in table format
+        if products:
+            self._display_products_table(products, "ALL PRODUCTS FROM API")
+
+        # Filter by budget if specified (using structured fields - NO BUFFERS)
+        if wizard_state.budget_max is not None or wizard_state.budget_min is not None:
+            before_count = len(products)
+
+            logger.debug("\n[BUDGET FILTER] Applying STRICT filtering:")
+            if wizard_state.budget_min:
+                logger.debug(f"  Min: ${wizard_state.budget_min}")
+            if wizard_state.budget_max:
+                logger.debug(f"  Max: ${wizard_state.budget_max}")
+            if wizard_state.budget_min:
+                products = [p for p in products if p.price >= wizard_state.budget_min]
+            if wizard_state.budget_max:
+                products = [p for p in products if p.price <= wizard_state.budget_max]
+
+            after_count = len(products)
+            logger.debug(
+                f"[BUDGET FILTER] Filtered: {before_count} \u2192 {after_count} products"
+            )
+
+            if products:
+                self._display_products_table(products, "AFTER BUDGET FILTERING")
+        else:
+            logger.debug("[BUDGET FILTER] No budget constraints, keeping all products")
 
         return products
+
+    def _display_products_table(self, products: List[Product], title: str = "PRODUCTS"):
+        """Display products in a readable table format for debugging"""
+        logger.debug(f"\n{'=' * 80}")
+        logger.debug(f" {title} ")
+        logger.debug(f"{'=' * 80}")
+        logger.debug(f"{'#':<4} {'NAME':<40} {'PRICE':<10} {'ID':<10}")
+        logger.debug(f"{'-' * 80}")
+
+        for idx, product in enumerate(products[:20], 1):  # Show first 20
+            name = product.name[:38] + ".." if len(product.name) > 40 else product.name
+            logger.debug(f"{idx:<4} {name:<40} ${product.price:<9.2f} {product.id:<10}")
+
+        if len(products) > 20:
+            logger.debug(f"... and {len(products) - 20} more products")
+
+        logger.debug(f"{'=' * 80}\n")
 
     def _prefilter_explicit(
         self, products: List[Product], wizard_state: GiftWizardState
@@ -141,8 +190,12 @@ class GiftRecommender:
         PATH A: Keep products that mention at least one explicitly loved item
         Used for Best Match and Safe Bet picks
         """
+        logger.debug("\n[PATH A - EXPLICIT FILTER]")
+        logger.debug(f"Recipient loves: {wizard_state.recipient_loves}")
+
         if not wizard_state.recipient_loves:
             # If no preferences, return all products
+            logger.debug("No explicit loves specified, returning all products")
             return products
 
         filtered = []
@@ -151,13 +204,18 @@ class GiftRecommender:
             combined = f"{product.name} {product.description} {product.meta_description}".lower()
 
             # Check if ANY loved item is mentioned
-            has_loved = any(
-                loved.lower() in combined for loved in wizard_state.recipient_loves
-            )
+            matched_loves = []
+            for loved in wizard_state.recipient_loves:
+                if loved.lower() in combined:
+                    matched_loves.append(loved)
 
-            if has_loved:
+            if matched_loves:
                 filtered.append(product)
+                logger.debug(
+                    f"✓ {product.name[:50]:50} | Matches: {', '.join(matched_loves)}"
+                )
 
+        logger.debug(f"[PATH A] Result: {len(filtered)} products match explicit loves")
         return filtered
 
     def _prefilter_semantic(
@@ -171,7 +229,13 @@ class GiftRecommender:
         Returns:
             (products, similarity_scores) where similarity_scores is a dict mapping product.id -> similarity score
         """
+        logger.debug("\n[PATH B - SEMANTIC FILTER]")
+        logger.debug(f"Recipient description: {wizard_state.recipient_description}")
+        logger.debug(f"Excluding explicit loves: {wizard_state.recipient_loves}")
+        logger.debug(f"Excluding explicit hates: {wizard_state.recipient_hates}")
+
         if not wizard_state.recipient_description:
+            logger.debug("No description provided, returning empty semantic results")
             return [], {}
 
         # Get embedding of persona description
@@ -186,19 +250,23 @@ class GiftRecommender:
 
             # EXCLUDE if mentions explicit preferences
             mentions_explicit = False
+            excluded_by = None
 
             for loved in wizard_state.recipient_loves:
                 if loved.lower() in combined:
                     mentions_explicit = True
+                    excluded_by = f"love: {loved}"
                     break
 
             if not mentions_explicit:
                 for hated in wizard_state.recipient_hates or []:
                     if hated.lower() in combined:
                         mentions_explicit = True
+                        excluded_by = f"hate: {hated}"
                         break
 
             if mentions_explicit:
+                logger.debug(f"✗ {product.name[:45]:45} | Excluded by {excluded_by}")
                 continue  # Skip, belongs in Path A
 
             # Calculate semantic similarity
@@ -210,6 +278,7 @@ class GiftRecommender:
             # Keep if semantically relevant
             if similarity > 0.8:
                 candidates.append((product, similarity))
+                logger.debug(f"✓ {product.name[:45]:45} | Similarity: {similarity:.3f}")
 
         # Sort by similarity and take top 3
         candidates.sort(key=lambda x: x[1], reverse=True)
@@ -218,6 +287,9 @@ class GiftRecommender:
         top_products = [p for p, _ in top_candidates]
         similarity_scores = {p.id: sim for p, sim in top_candidates}
 
+        logger.debug(
+            f"[PATH B] Result: {len(top_products)} products with high semantic similarity"
+        )
         return top_products, similarity_scores
 
     def _ai_safety_filter(
@@ -227,11 +299,19 @@ class GiftRecommender:
         Use AI to identify products that should be rejected
         based on hates and allergies
         """
+        logger.debug(f"\n[{source_path} - AI SAFETY FILTER]")
+        logger.debug("Checking against:")
+        logger.debug(f"  Hates: {wizard_state.recipient_hates}")
+        logger.debug(f"  Allergies: {wizard_state.recipient_allergies}")
+        logger.debug(f"  Dietary: {wizard_state.recipient_dietary}")
+
         if not products:
+            logger.debug("No products to filter")
             return []
 
         if not wizard_state.recipient_hates and not wizard_state.recipient_allergies:
             # No restrictions, all products are safe
+            logger.debug("No restrictions specified, all products are safe")
             return products
 
         hates = wizard_state.recipient_hates or []
@@ -251,8 +331,12 @@ PRODUCTS TO VALIDATE (from {source_path}):
 {
             json.dumps(
                 [
-                    {"id": p.id, "name": p.name, "description": p.description[:150]}
-                    for p in products[:20]  # Limit to 20 per batch
+                    {
+                        "product_id": p.id,
+                        "name": p.name,
+                        "description": p.description[:150],
+                    }
+                    for p in products
                 ],
                 indent=2,
             )
@@ -282,7 +366,7 @@ IMPORTANT:
 Return ONLY a JSON object:
 {{
   "validations": [
-    {{"id": "product_id", "reject": true/false, "reason": "explanation or null"}}
+    {{"product_id": "product_id", "reject": true/false, "reason": "explanation or null"}}
   ]
 }}
 """
@@ -296,6 +380,7 @@ Return ONLY a JSON object:
 
             # Filter out rejected products
             safe_products = []
+            rejected_count = 0
             for product in products:
                 validation = next(
                     (
@@ -309,12 +394,18 @@ Return ONLY a JSON object:
                 if not validation or not validation.reject:
                     safe_products.append(product)
                 else:
-                    print(f"  ✗ REJECTED: {product.name[:50]} - {validation.reason}")
+                    rejected_count += 1
+                    logger.debug(
+                        f"  ✗ REJECTED: {product.name[:50]} - {validation.reason}"
+                    )
 
+            logger.debug(
+                f"[{source_path} SAFETY] {len(safe_products)} safe, {rejected_count} rejected"
+            )
             return safe_products
 
         except Exception as e:
-            print(f"AI Safety Filter Error: {e}")
+            logger.error(f"AI Safety Filter Error: {e}")
             # Fallback: use simple keyword matching
             return self._fallback_safety_filter(products, wizard_state)
 
@@ -375,6 +466,11 @@ Return ONLY a JSON object:
 
         # === SAFE BET (from Path A, exclude best match) ===
         remaining_a = [p for p in path_a_safe if p.id != best_match["product"].id]
+
+        # BULLETPROOF OCCASION FILTERING: Remove products with incompatible occasions
+        # Filter out products that mention distinct occasions different from the user's occasion
+        if wizard_state.occasion:
+            remaining_a = self._filter_by_occasion(remaining_a, wizard_state.occasion)
 
         # Select product with lowest popularity_rank (most popular)
         products_with_rank = [p for p in remaining_a if p.popularity_rank is not None]
@@ -442,6 +538,30 @@ Return ONLY a JSON object:
                     )
 
                 unique = max(unique_scores, key=lambda x: x["score"])
+        else:
+            # Fallback: pick a "unique" option from remaining Path A items
+            remaining_for_unique = [
+                p
+                for p in path_a_safe
+                if p.id not in {best_match["product"].id, safe_bet["product"].id}
+            ]
+            if remaining_for_unique:
+                unique_scores = []
+                for product in remaining_for_unique:
+                    score, breakdown = calculate_unique_score(
+                        product, wizard_state, path_a_safe + path_b_safe
+                    )
+                    breakdown.append(
+                        "Fallback: no description for semantic match; selected from remaining options"
+                    )
+                    unique_scores.append(
+                        {"product": product, "score": score, "breakdown": breakdown}
+                    )
+
+                unique = max(unique_scores, key=lambda x: x["score"])
+            else:
+                # Final fallback: reuse safe bet if there is no remaining distinct option
+                unique = safe_bet
 
         # Build recommendations
         return ThreePickRecommendations(
@@ -469,6 +589,42 @@ Return ONLY a JSON object:
             if unique
             else None,
         )
+
+    def _filter_by_occasion(
+        self, products: List[Product], user_occasion: str
+    ) -> List[Product]:
+        """Use API occasion tags for authoritative filtering."""
+        user_occasion_lower = user_occasion.lower().strip()
+        search_terms = [user_occasion_lower, f"{user_occasion_lower} gifts"]
+
+        logger.debug(f"[OCCASION] Filtering {len(products)} for '{user_occasion}'")
+        logger.debug(f"[OCCASION] Search terms: {search_terms}")
+        filtered = []
+        for product in products:
+            product_occasions = [o.lower() for o in product.occasions]
+            logger.debug(
+                f"[OCCASION] {product.name[:40]:40} | Raw occasions: {product.occasions} | Lowercase: {product_occasions}"
+            )
+            matches = any(
+                term in occ for term in search_terms for occ in product_occasions
+            )
+            if matches:
+                logger.debug(f"✓ MATCH: {product.name[:40]:40} | {product_occasions}")
+                filtered.append(product)
+            else:
+                logger.debug(f"✗ SKIP: {product.name[:40]:40} | {product_occasions}")
+
+        logger.info(
+            f"[OCCASION] Result: {len(filtered)}/{len(products)} match '{user_occasion}'"
+        )
+
+        if filtered:
+            return filtered
+        else:
+            logger.warning(
+                f"[OCCASION] No matches. Using all {len(products)} as fallback."
+            )
+            return products
 
     def _add_explanations(
         self, picks: ThreePickRecommendations, wizard_state: GiftWizardState
@@ -550,7 +706,7 @@ Return ONLY a JSON object:
             return explanation.strip()
 
         except Exception as e:
-            print(f"Error generating explanation: {e}")
+            logger.error(f"Error generating explanation: {e}")
             # Fallback to template
             return self._template_explanation(recommendation, wizard_state, category)
 

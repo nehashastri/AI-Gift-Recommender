@@ -1,0 +1,5 @@
+<!-- Favicon placeholder - data URI for a simple gift box emoji -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#d4403b"/>
+  <text x="50" y="70" font-size="70" text-anchor="middle" dominant-baseline="middle">🎁</text>
+</svg>

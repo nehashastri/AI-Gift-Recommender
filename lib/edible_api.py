@@ -1,10 +1,15 @@
 # lib/edible_api.py
 
+import html
+import logging
+import re
 from typing import List
 
 import requests
 
 from lib.types import Product
+
+logger = logging.getLogger(__name__)
 
 
 class EdibleAPIClient:
@@ -26,10 +31,10 @@ class EdibleAPIClient:
             List of Product objects
         """
         if use_cache and keyword in self.cache:
-            print(f"✓ Using cached results for '{keyword}'")
+            logger.debug(f"Using cached results for '{keyword}'")
             return self.cache[keyword]
 
-        print(f"→ Fetching from API: '{keyword}'")
+        logger.debug(f"Fetching from API: '{keyword}'")
 
         headers = {
             "Content-Type": "application/json",
@@ -47,7 +52,7 @@ class EdibleAPIClient:
 
             # Accept both 200 and 201 as success
             if response.status_code not in [200, 201]:
-                print(f"✗ API Error: Status {response.status_code}")
+                logger.error(f"API Error: Status {response.status_code}")
                 return []
 
             # Response is a direct array
@@ -57,11 +62,11 @@ class EdibleAPIClient:
             # Cache results
             self.cache[keyword] = products
 
-            print(f"✓ Found {len(products)} products")
+            logger.debug(f"Found {len(products)} products")
             return products
 
         except Exception as e:
-            print(f"✗ Error: {e}")
+            logger.error(f"Error: {e}")
             return []
 
     def _parse_response(self, data: List[dict]) -> List[Product]:
@@ -73,25 +78,80 @@ class EdibleAPIClient:
                 # Use maxPrice as requested
                 price = item.get("maxPrice", item.get("minPrice", 0))
 
+                # Sanitize description to remove HTML tags and normalize whitespace
+                raw_description = item.get("description", "")
+                clean_description = self._sanitize_description(raw_description)
+
+                # Parse occasion tags from API (comma-separated string)
+                occasions_raw = item.get("occasion", "")
+                occasions = (
+                    [
+                        occ.strip().lower()
+                        for occ in occasions_raw.split(",")
+                        if occ.strip()
+                    ]
+                    if occasions_raw
+                    else []
+                )
+
+                # Debug: Log first 3 products' occasion parsing
+                if index <= 3:
+                    logger.debug(
+                        f"[API PARSE] Product #{index} ({item.get('alt', 'Unknown')[:40]}): occasion_raw='{occasions_raw}' -> parsed={occasions}"
+                    )
+
                 product = Product(
                     id=str(item.get("id", "")),
                     name=item.get("alt", item.get("name", "Unknown Product")),
-                    description=item.get("description", ""),
+                    description=clean_description,
                     meta_description=item.get("metaTagDescription"),
                     price=float(price),
                     image_url=item.get("image"),
                     thumbnail_url=item.get("thumbnail"),
                     ingredients=item.get("ingrediantNames"),
                     popularity_rank=index,
+                    occasions=occasions,
                 )
 
                 products.append(product)
 
             except Exception as e:
-                print(f"Warning: Couldn't parse product at index {index}: {e}")
+                logger.warning(f"Couldn't parse product at index {index}: {e}")
                 continue
 
         return products
+
+    def _sanitize_description(self, description: str) -> str:
+        """
+        Clean description by removing HTML tags and normalizing whitespace
+
+        Handles:
+        - HTML tags: <br>, <br/>, <p>, etc.
+        - HTML entities: &nbsp;, &amp;, etc.
+        - Carriage returns and excessive whitespace
+        - Line breaks within text
+        """
+        if not description:
+            return ""
+
+        # Convert common HTML entities
+        text = html.unescape(description)
+
+        # Remove HTML tags: <br>, <br/>, <p>, </p>, etc.
+        text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"</?p\s*/?>", " ", text, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", "", text)  # Remove any other HTML tags
+
+        # Normalize whitespace: convert \r\n, \r, \n to single space
+        text = re.sub(r"[\r\n]+", " ", text)
+
+        # Collapse multiple spaces into single space
+        text = re.sub(r"\s+", " ", text)
+
+        # Strip leading/trailing whitespace
+        text = text.strip()
+
+        return text
 
     def clear_cache(self):
         """Clear cached results"""

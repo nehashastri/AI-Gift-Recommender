@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edible - Gift Genius Chatbot POC</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="/static/css/main.css">
+</head>
+
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="logo">
+                <span class="logo-icon">🎁</span>
+                <span>Edible.com</span>
+            </div>
+            <div class="nav-links">
+                <a href="#" class="nav-link">Shop by Occasion</a>
+                <a href="#" class="nav-link">Corporate Gifts</a>
+                <a href="#" class="nav-link">Subscriptions</a>
+                <a href="#" class="nav-link">Contact</a>
+            </div>
+            <div class="nav-right">
+                <button class="btn-login">Login</button>
+                <button class="btn-cart">🛒 Cart</button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Find the Perfect Gift</h1>
+            <p>Surprise your loved ones with premium, gourmet gifts delivered to their door</p>
+            <button class="btn-primary btn-cta">Shop Now</button>
+        </div>
+        <div class="hero-image">
+            <div class="hero-placeholder">🎀 Gift Box Collection</div>
+        </div>
+    </section>
+
+    <!-- Featured Products -->
+    <section class="featured">
+        <h2>Featured Collections</h2>
+        <div class="product-grid">
+            <div class="product-card placeholder">
+                <div class="product-image-placeholder">🍫</div>
+                <h3>Chocolate Arrangements</h3>
+                <p>Premium assortments</p>
+            </div>
+            <div class="product-card placeholder">
+                <div class="product-image-placeholder">🍓</div>
+                <h3>Fruit Creations</h3>
+                <p>Fresh & delicious</p>
+            </div>
+            <div class="product-card placeholder">
+                <div class="product-image-placeholder">🧁</div>
+                <h3>Baked Goods</h3>
+                <p>Freshly made</p>
+            </div>
+            <div class="product-card placeholder">
+                <div class="product-image-placeholder">🌸</div>
+                <h3>Floral Gifts</h3>
+                <p>Beautiful displays</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Side Widget - Chatbot Help -->
+    <div id="chatbot-widget" class="chatbot-widget">
+        <button id="chatbot-toggle" class="chatbot-toggle">
+            <span class="chatbot-icon">💬</span>
+            <span class="chatbot-text">Need Help<br>Finding a Gift?</span>
+        </button>
+    </div>
+
+    <!-- Chatbot Modal -->
+    <div id="chatbot-modal" class="modal">
+        <div class="modal-content">
+            <div class="chatbot-header">
+                <h2>Gift Genius Chatbot</h2>
+                <button id="close-chatbot" class="close-btn">&times;</button>
+            </div>
+
+            <div id="chatbot-body" class="chatbot-body">
+                <!-- Chatbot steps will be rendered here -->
+            </div>
+
+            <div class="chatbot-footer">
+                <button id="prev-btn" class="btn-secondary" style="display: none;">← Previous</button>
+                <button id="next-btn" class="btn-primary">Next →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendations Container -->
+    <div id="recommendations-container" class="recommendations-container">
+        <div class="recommendations-content">
+            <button class="close-btn" onclick="closeRecommendations()">&times;</button>
+            <h2>Your Top 3 Gift Picks for <span id="recipient-name"></span></h2>
+
+            <div id="recommendations-grid" class="recommendations-grid">
+                <!-- Recommendation cards will be inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Checkout Page -->
+    <div id="checkout-page" class="checkout-page">
+        <div class="checkout-content">
+            <h2>Checkout</h2>
+            <div id="checkout-product" class="checkout-product"></div>
+            <div class="checkout-form">
+                <form id="checkout-form">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <input type="text" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Shipping Address</label>
+                        <input type="text" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Card Number</label>
+                        <input type="text" placeholder="1234 5678 9000 1234" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Complete Purchase</button>
+                </form>
+            </div>
+            <button onclick="goBackToRecommendations()" class="btn-secondary">Back to Recommendations</button>
+        </div>
+    </div>
+
+    <!-- Signup Page -->
+    <div id="signup-page" class="signup-page">
+        <div class="signup-content">
+            <h2>Become a Gifting Genius</h2>
+            <p>Sign up to receive email reminders for birthdays, anniversaries, and special occasions. Never miss a
+                moment to give the perfect gift!</p>
+
+            <form id="signup-form">
+                <div class="form-group">
+                    <label>Full Name</label>
+                    <input type="text" name="full_name" required>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" required>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="reminders" name="reminders" checked>
+                    <label for="reminders">Send me email reminders for upcoming occasions</label>
+                </div>
+                <button type="submit" class="btn-primary">Create Account</button>
+            </form>
+            <button onclick="goBackToRecommendations()" class="btn-secondary">Back</button>
+        </div>
+    </div>
+
+    <script src="/static/js/chatbot.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>
